@@ -113,41 +113,41 @@ proxy-groups:
       - provider-main
       - provider-backup
     proxies:
-      - ALL
       - DIRECT
 
-  - name: ALL
+  - name: PROXY_NOHK
     type: select
     use:
       - provider-main
       - provider-backup
+    exclude-filter: "(?i)港|HK|Hong Kong|🇭🇰"
 
   - name: STREAM
     type: select
     proxies:
       - PROXY
-      - ALL
+      - PROXY_NOHK
       - DIRECT
 
   - name: AI
     type: select
     proxies:
       - PROXY
-      - ALL
+      - PROXY_NOHK
       - DIRECT
 
-  - name: TELEGRAM
+  - name: IM
     type: select
     proxies:
       - PROXY
-      - ALL
+      - PROXY_NOHK
       - DIRECT
 
   - name: STEAM
     type: select
     proxies:
       - PROXY
-      - ALL
+      - PROXY_NOHK
       - DIRECT
 
   - name: STEAM-CN
@@ -161,7 +161,7 @@ proxy-groups:
     proxies:
       - DIRECT
       - PROXY
-      - ALL
+      - PROXY_NOHK
 
   - name: APPLE
     type: select
@@ -173,7 +173,7 @@ proxy-groups:
     type: select
     proxies:
       - PROXY
-      - ALL
+      - PROXY_NOHK
       - DIRECT
 
 # =========================================
@@ -340,9 +340,9 @@ rules:
   - RULE-SET,youtube-domain,STREAM
   - RULE-SET,disney-domain,STREAM
   - RULE-SET,spotify-domain,STREAM
-  - RULE-SET,telegram-domain,TELEGRAM
-  - RULE-SET,telegram-ip,TELEGRAM,no-resolve
-  - RULE-SET,signal-domain,TELEGRAM
+  - RULE-SET,telegram-domain,IM
+  - RULE-SET,telegram-ip,IM,no-resolve
+  - RULE-SET,signal-domain,IM
   - RULE-SET,steam-domain,STEAM
   - RULE-SET,proxy-domain,PROXY
 
