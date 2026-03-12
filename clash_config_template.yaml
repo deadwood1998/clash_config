@@ -1,0 +1,368 @@
+# =========================================
+# Universal mobile-first config for Mihomo + Stash
+# - provider based
+# - conservative syntax for cross-compatibility
+# - optimized for mobile, still good on desktop
+# =========================================
+
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: true
+unified-delay: true
+tcp-concurrent: true
+
+# --- API ---
+external-controller: 127.0.0.1:9090
+secret: ""
+
+# =========================================
+# DNS
+# IPv6 strategy:
+#   DIRECT → full dual-stack; tcp-concurrent races v4/v6, behaves like no proxy
+#   PROXY  → fake-ip forwards domain to node; v4-only nodes resolve to v4 naturally
+# =========================================
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: true
+  prefer-h3: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  use-hosts: true
+  respect-rules: false
+  fake-ip-filter:
+    - "*.lan"
+    - "*.local"
+    - "*.localhost"
+    - "+.msftconnecttest.com"
+    - "+.msftncsi.com"
+    - "connectivitycheck.gstatic.com"
+    - "connectivitycheck.platform.hicloud.com"
+    - "captive.apple.com"
+    - "time.*.com"
+    - "ntp.*.com"
+    - "+.ntp.org"
+    - "+.pool.ntp.org"
+    - "localhost.ptlogin2.qq.com"
+    - "localhost.sec.qq.com"
+    - "+.srv.nintendo.net"
+    - "+.stun.*.*"
+    - "+.stun.*.*.*"
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+    - "[2400:3200::1]"
+    - "[2402:4e00::]"
+  fallback:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+    - https://[2606:4700:4700::1111]/dns-query
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+    ipcidr:
+      - 240.0.0.0/4
+
+# =========================================
+# TUN
+# conservative settings for Mihomo + Stash
+# =========================================
+tun:
+  enable: true
+  stack: mixed
+  dns-hijack:
+    - any:53
+  auto-route: true
+  auto-detect-interface: true
+
+# =========================================
+# Proxy Providers
+# Replace URLs with your own subscriptions
+# Stash and Mihomo both support remote proxy sets/providers.
+# =========================================
+proxy-providers:
+  provider-main:
+    type: http
+    url: "https://example.com/sub?target=clash"
+    path: ./providers/provider-main.yaml
+    interval: 21600
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 600
+
+  provider-backup:
+    type: http
+    url: "https://example.org/sub?target=clash"
+    path: ./providers/provider-backup.yaml
+    interval: 21600
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 600
+
+# =========================================
+# Proxy Groups
+# =========================================
+proxy-groups:
+  - name: PROXY
+    type: select
+    use:
+      - provider-main
+      - provider-backup
+    proxies:
+      - AUTO
+      - FALLBACK
+      - DIRECT
+
+  - name: AUTO
+    type: url-test
+    use:
+      - provider-main
+      - provider-backup
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+
+  - name: FALLBACK
+    type: fallback
+    use:
+      - provider-main
+      - provider-backup
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+
+  - name: STREAM
+    type: select
+    proxies:
+      - PROXY
+      - AUTO
+      - FALLBACK
+      - DIRECT
+
+  - name: AI
+    type: select
+    proxies:
+      - PROXY
+      - AUTO
+      - FALLBACK
+      - DIRECT
+
+  - name: TELEGRAM
+    type: select
+    proxies:
+      - PROXY
+      - AUTO
+      - FALLBACK
+      - DIRECT
+
+  - name: STEAM
+    type: select
+    proxies:
+      - PROXY
+      - AUTO
+      - FALLBACK
+      - DIRECT
+
+  - name: STEAM-CN
+    type: select
+    proxies:
+      - DIRECT
+      - PROXY
+
+  - name: MICROSOFT
+    type: select
+    proxies:
+      - DIRECT
+      - PROXY
+      - AUTO
+      - FALLBACK
+
+  - name: APPLE
+    type: select
+    proxies:
+      - DIRECT
+      - PROXY
+
+  - name: FINAL
+    type: select
+    proxies:
+      - PROXY
+      - AUTO
+      - FALLBACK
+      - DIRECT
+
+# =========================================
+# Rule Providers
+# Prefer domain/ipcidr over classical on mobile.
+# =========================================
+rule-providers:
+  direct-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-cn.yaml"
+    path: ./ruleset/direct-domain.yaml
+    interval: 86400
+
+  proxy-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.yaml"
+    path: ./ruleset/proxy-domain.yaml
+    interval: 86400
+
+  apple-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple.yaml"
+    path: ./ruleset/apple-domain.yaml
+    interval: 86400
+
+  ai-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-chat-!cn.yaml"
+    path: ./ruleset/ai-domain.yaml
+    interval: 86400
+
+  steam-cn:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam@cn.yaml"
+    path: ./ruleset/steam-cn.yaml
+    interval: 86400
+
+  steam-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.yaml"
+    path: ./ruleset/steam-domain.yaml
+    interval: 86400
+
+  microsoft-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.yaml"
+    path: ./ruleset/microsoft-domain.yaml
+    interval: 86400
+
+  netflix-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.yaml"
+    path: ./ruleset/netflix-domain.yaml
+    interval: 86400
+
+  youtube-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.yaml"
+    path: ./ruleset/youtube-domain.yaml
+    interval: 86400
+
+  disney-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/disney.yaml"
+    path: ./ruleset/disney-domain.yaml
+    interval: 86400
+
+  spotify-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/spotify.yaml"
+    path: ./ruleset/spotify-domain.yaml
+    interval: 86400
+
+  telegram-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.yaml"
+    path: ./ruleset/telegram-domain.yaml
+    interval: 86400
+
+  telegram-ip:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.yaml"
+    path: ./ruleset/telegram-ip.yaml
+    interval: 86400
+
+  signal-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/signal.yaml"
+    path: ./ruleset/signal-domain.yaml
+    interval: 86400
+
+  cn-ip:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.yaml"
+    path: ./ruleset/cn-ip.yaml
+    interval: 86400
+
+  private-ip:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.yaml"
+    path: ./ruleset/private-ip.yaml
+    interval: 86400
+
+# =========================================
+# Rules
+# Order matters. Put frequent DIRECT domains early. Rules are matched top-down.
+# =========================================
+rules:
+  # --- DIRECT fast path ---
+  - RULE-SET,private-ip,DIRECT,no-resolve
+  - DOMAIN-SUFFIX,local,DIRECT
+  - DOMAIN-SUFFIX,lan,DIRECT
+
+  # Default-direct groups (small rule sets, fast match)
+  - RULE-SET,apple-domain,APPLE
+  - RULE-SET,steam-cn,STEAM-CN
+  - RULE-SET,microsoft-domain,MICROSOFT
+
+  # CN domains direct (bulk domestic traffic)
+  - RULE-SET,direct-domain,DIRECT
+  - RULE-SET,cn-ip,DIRECT,no-resolve
+  - GEOIP,CN,DIRECT
+
+  # Block QUIC (UDP 443) for traffic that will be proxied.
+  # Browsers fall back to TCP HTTPS seamlessly.
+  # Direct traffic already matched above, unaffected.
+  - AND,((NETWORK,udp),(DST-PORT,443)),REJECT
+
+  # --- PROXY path (now TCP-only, clean tunnel) ---
+  - RULE-SET,ai-domain,AI
+  - RULE-SET,netflix-domain,STREAM
+  - RULE-SET,youtube-domain,STREAM
+  - RULE-SET,disney-domain,STREAM
+  - RULE-SET,spotify-domain,STREAM
+  - RULE-SET,telegram-domain,TELEGRAM
+  - RULE-SET,telegram-ip,TELEGRAM,no-resolve
+  - RULE-SET,signal-domain,TELEGRAM
+  - RULE-SET,steam-domain,STEAM
+  - RULE-SET,proxy-domain,PROXY
+
+  # Final
+  - MATCH,FINAL

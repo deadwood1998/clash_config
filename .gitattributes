@@ -1,0 +1,2 @@
+# Force LF line endings on all platforms to keep YAML/Python consistent.
+* text=auto eol=lf

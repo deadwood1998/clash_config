@@ -1,0 +1,10 @@
+# Generated config (contains real subscription URLs)
+clash_config.yaml
+
+# Downloaded provider & ruleset caches
+providers/
+ruleset/
+
+# Python
+__pycache__/
+*.py[cod]
