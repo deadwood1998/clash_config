@@ -1,6 +1,6 @@
 # =========================================
 # Universal mobile-first config for Mihomo + Stash
-# - provider based
+# - direct proxy injection (no proxy-provider)
 # - conservative syntax for cross-compatibility
 # - optimized for mobile, still good on desktop
 # =========================================
@@ -78,30 +78,9 @@ tun:
   auto-detect-interface: true
 
 # =========================================
-# Proxy Providers
-# Replace URLs with your own subscriptions
-# Stash and Mihomo both support remote proxy sets/providers.
+# Proxies – generate_config.py will inject nodes here
 # =========================================
-proxy-providers:
-  provider-main:
-    type: http
-    url: "https://example.com/sub?target=clash"
-    path: ./providers/provider-main.yaml
-    interval: 21600
-    health-check:
-      enable: true
-      url: https://www.gstatic.com/generate_204
-      interval: 600
-
-  provider-backup:
-    type: http
-    url: "https://example.org/sub?target=clash"
-    path: ./providers/provider-backup.yaml
-    interval: 21600
-    health-check:
-      enable: true
-      url: https://www.gstatic.com/generate_204
-      interval: 600
+proxies: []
 
 # =========================================
 # Proxy Groups
@@ -109,18 +88,14 @@ proxy-providers:
 proxy-groups:
   - name: PROXY
     type: select
-    use:
-      - provider-main
-      - provider-backup
     proxies:
+      # __INJECT_ALL__
       - DIRECT
 
   - name: PROXY_NOHK
     type: select
-    use:
-      - provider-main
-      - provider-backup
-    exclude-filter: "(?i)港|HK|Hong Kong|🇭🇰"
+    proxies:
+      # __INJECT_NOHK__
 
   - name: STREAM
     type: select

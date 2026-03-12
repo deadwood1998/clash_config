@@ -1,14 +1,37 @@
 #!/usr/bin/env python3
-"""根据订阅 URL 列表和模板生成 Clash/Mihomo 配置文件。"""
+"""根据订阅 URL 下载节点并生成 Clash/Mihomo 配置文件。
+
+脚本使用 Clash UA 下载每个订阅 URL 的配置，提取其中的代理节点，
+然后注入到模板中，生成最终配置。不依赖 proxy-provider 机制。
+"""
 
 import argparse
+import gzip
 import re
+import ssl
 import sys
+import urllib.request
+import zlib
 from pathlib import Path
+
+import yaml
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_TEMPLATE = SCRIPT_DIR / "clash_config_template.yaml"
 DEFAULT_OUTPUT = SCRIPT_DIR / "clash_config.yaml"
+
+CLASH_UA = "clash-verge/v1.7.7"
+HK_FILTER = re.compile(r"(?i)港|HK|Hong Kong|🇭🇰")
+
+MARKER_ALL = "# __INJECT_ALL__"
+MARKER_NOHK = "# __INJECT_NOHK__"
+
+
+class _ClashDumper(yaml.SafeDumper):
+    """Indents list items within mappings for Clash-style YAML."""
+
+    def increase_indent(self, flow=False, indentless=False):
+        return super().increase_indent(flow, False)
 
 
 def parse_args():
@@ -25,8 +48,8 @@ def parse_args():
 """
     parser = argparse.ArgumentParser(
         description=(
-            "根据订阅 URL 列表和模板生成 Clash/Mihomo 配置文件。\n"
-            "脚本会自动为每个 URL 生成 proxy-provider 并更新 proxy-groups 引用。"
+            "根据订阅 URL 下载节点并生成 Clash/Mihomo 配置文件。\n"
+            "脚本会下载每个 URL 对应的配置，提取代理节点后注入到模板中。"
         ),
         epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -64,117 +87,92 @@ def collect_urls_interactive():
     return urls
 
 
-def find_provider_section(lines):
-    """Return [start, end) line indices for the proxy-providers section content."""
-    start = None
-    for i, line in enumerate(lines):
-        if re.match(r"^proxy-providers\s*:", line):
-            start = i
-            break
-    if start is None:
-        raise ValueError("模板中未找到 proxy-providers 区块")
-
-    end = start + 1
-    for i in range(start + 1, len(lines)):
-        if lines[i] and not lines[i][0].isspace():
-            end = i
-            break
-    else:
-        end = len(lines)
-
-    while end > start + 1 and not lines[end - 1].strip():
-        end -= 1
-
-    return start, end
+def download_subscription(url):
+    """使用 Clash UA 下载订阅配置并返回解析后的 YAML。"""
+    req = urllib.request.Request(url, headers={
+        "User-Agent": CLASH_UA,
+        "Accept": "*/*",
+    })
+    ctx = ssl.create_default_context()
+    with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
+        data = resp.read()
+        encoding = resp.headers.get("Content-Encoding", "")
+        if encoding == "gzip":
+            data = gzip.decompress(data)
+        elif encoding == "deflate":
+            data = zlib.decompress(data)
+        raw = data.decode("utf-8")
+    return yaml.safe_load(raw)
 
 
-def parse_old_provider_names(lines, start, end):
-    """Extract provider names defined in the section."""
-    names = []
-    for i in range(start + 1, end):
-        m = re.match(r"^  (\S+)\s*:", lines[i])
-        if m:
-            names.append(m.group(1))
-    return names
+def extract_proxies(config_data):
+    """从下载的 Clash 配置中提取 proxies 列表。"""
+    if not isinstance(config_data, dict):
+        return []
+    return config_data.get("proxies") or config_data.get("Proxy") or []
 
 
-def extract_provider_pattern(lines, start, end):
-    """Extract the first provider block as a reusable pattern."""
-    block_start = None
-    for i in range(start + 1, end):
-        if re.match(r"^  \S+\s*:", lines[i]):
-            block_start = i
-            break
-    if block_start is None:
-        raise ValueError("模板中未找到 provider 定义块")
-
-    block_end = block_start + 1
-    for i in range(block_start + 1, end):
-        if re.match(r"^  \S+\s*:", lines[i]):
-            block_end = i
-            break
-    else:
-        block_end = end
-
-    while block_end > block_start + 1 and not lines[block_end - 1].strip():
-        block_end -= 1
-
-    return lines[block_start:block_end]
+def fetch_all_proxies(urls):
+    """下载所有订阅并合并去重节点。"""
+    all_proxies = []
+    seen = set()
+    for url in urls:
+        print(f"  下载: {url[:80]}...")
+        try:
+            data = download_subscription(url)
+            proxies = extract_proxies(data)
+            added = 0
+            for p in proxies:
+                name = p.get("name", "")
+                if name and name not in seen:
+                    seen.add(name)
+                    all_proxies.append(p)
+                    added += 1
+            print(f"    获取 {len(proxies)} 个节点，新增 {added} 个")
+        except Exception as e:
+            print(f"    失败: {e}", file=sys.stderr)
+    return all_proxies
 
 
-def build_provider_block(pattern_lines, name, url):
-    """Produce a concrete provider block by substituting name, url and path."""
-    result = []
-    for line in pattern_lines:
-        if re.match(r"^  \S+\s*:", line):
-            result.append(f"  {name}:")
-        elif re.match(r"^    url\s*:", line):
-            result.append(f'    url: "{url}"')
-        elif re.match(r"^    path\s*:", line) and "providers/" in line:
-            result.append(f"    path: ./providers/{name}.yaml")
-        else:
-            result.append(line)
-    return result
-
-
-def replace_use_lists(text, old_names, new_names):
-    """Replace every use: list that references old providers with new ones."""
-    old_alt = "|".join(re.escape(n) for n in old_names)
-    pattern = re.compile(
-        r"([ \t]+use:\n)"
-        r"((?:([ \t]+)- (?:" + old_alt + r")\n)"
-        r"(?:[ \t]+- (?:" + old_alt + r")\n)*)"
+def dump_proxies_block(proxies):
+    """将 proxies 列表序列化为 Clash 风格的 YAML 文本块。"""
+    raw = yaml.dump(
+        proxies, Dumper=_ClashDumper,
+        allow_unicode=True, default_flow_style=False,
+        sort_keys=False, width=1000,
     )
+    indented = "\n".join(
+        "  " + line if line.strip() else ""
+        for line in raw.rstrip("\n").splitlines()
+    )
+    return f"proxies:\n{indented}"
 
-    def _replacer(m):
-        indent = m.group(3)
-        return m.group(1) + "".join(f"{indent}- {n}\n" for n in new_names)
 
-    return pattern.sub(_replacer, text)
+def build_name_lines(names, indent):
+    """构建 proxy-group 中 proxies 列表的 YAML 行。"""
+    prefix = " " * indent
+    return "\n".join(f"{prefix}- {name}" for name in names)
 
 
-def generate_config(template_text, urls):
-    lines = template_text.splitlines()
+def generate_config(template_text, proxies):
+    """用下载的节点替换模板中的占位符，生成最终配置文本。"""
+    all_names = [p["name"] for p in proxies]
+    nohk_names = [n for n in all_names if not HK_FILTER.search(n)]
 
-    pp_start, pp_end = find_provider_section(lines)
-    old_names = parse_old_provider_names(lines, pp_start, pp_end)
-    pattern = extract_provider_pattern(lines, pp_start, pp_end)
+    text = template_text.replace("proxies: []", dump_proxies_block(proxies), 1)
 
-    new_names = [f"provider-{i + 1}" for i in range(len(urls))]
+    for line in template_text.splitlines():
+        stripped = line.strip()
+        if stripped == MARKER_ALL:
+            indent = len(line) - len(line.lstrip())
+            text = text.replace(line, build_name_lines(all_names, indent), 1)
+        elif stripped == MARKER_NOHK:
+            indent = len(line) - len(line.lstrip())
+            text = text.replace(line, build_name_lines(nohk_names, indent), 1)
 
-    section = ["proxy-providers:"]
-    for i, (name, url) in enumerate(zip(new_names, urls)):
-        section.extend(build_provider_block(pattern, name, url))
-        if i < len(urls) - 1:
-            section.append("")
-
-    result_lines = lines[:pp_start] + section + lines[pp_end:]
-    text = "\n".join(result_lines)
     if not text.endswith("\n"):
         text += "\n"
-
-    text = replace_use_lists(text, old_names, new_names)
-    return text, new_names
+    return text
 
 
 def main():
@@ -191,15 +189,29 @@ def main():
         sys.exit(1)
 
     template_text = template_path.read_text(encoding="utf-8")
-    result, new_names = generate_config(template_text, urls)
+
+    for marker in (MARKER_ALL, MARKER_NOHK):
+        if marker not in template_text:
+            print(f"错误: 模板中未找到占位标记: {marker}", file=sys.stderr)
+            sys.exit(1)
+
+    print("正在下载订阅并提取节点...")
+    proxies = fetch_all_proxies(urls)
+
+    if not proxies:
+        print("错误: 未获取到任何代理节点", file=sys.stderr)
+        sys.exit(1)
+
+    nohk_count = sum(1 for p in proxies if not HK_FILTER.search(p["name"]))
+    print(f"\n共获取 {len(proxies)} 个唯一节点 (非港区 {nohk_count} 个)")
+
+    result = generate_config(template_text, proxies)
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_bytes(result.encode("utf-8"))
+    output_path.write_text(result, encoding="utf-8")
 
     print(f"已生成配置文件: {output_path}")
-    print(f"  providers: {', '.join(new_names)}")
-    print(f"  URL 数量: {len(urls)}")
 
 
 if __name__ == "__main__":
