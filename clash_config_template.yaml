@@ -113,57 +113,41 @@ proxy-groups:
       - provider-main
       - provider-backup
     proxies:
-      - AUTO
-      - FALLBACK
+      - ALL
       - DIRECT
 
-  - name: AUTO
-    type: url-test
+  - name: ALL
+    type: select
     use:
       - provider-main
       - provider-backup
-    url: https://www.gstatic.com/generate_204
-    interval: 300
-    tolerance: 50
-
-  - name: FALLBACK
-    type: fallback
-    use:
-      - provider-main
-      - provider-backup
-    url: https://www.gstatic.com/generate_204
-    interval: 300
 
   - name: STREAM
     type: select
     proxies:
       - PROXY
-      - AUTO
-      - FALLBACK
+      - ALL
       - DIRECT
 
   - name: AI
     type: select
     proxies:
       - PROXY
-      - AUTO
-      - FALLBACK
+      - ALL
       - DIRECT
 
   - name: TELEGRAM
     type: select
     proxies:
       - PROXY
-      - AUTO
-      - FALLBACK
+      - ALL
       - DIRECT
 
   - name: STEAM
     type: select
     proxies:
       - PROXY
-      - AUTO
-      - FALLBACK
+      - ALL
       - DIRECT
 
   - name: STEAM-CN
@@ -177,8 +161,7 @@ proxy-groups:
     proxies:
       - DIRECT
       - PROXY
-      - AUTO
-      - FALLBACK
+      - ALL
 
   - name: APPLE
     type: select
@@ -190,8 +173,7 @@ proxy-groups:
     type: select
     proxies:
       - PROXY
-      - AUTO
-      - FALLBACK
+      - ALL
       - DIRECT
 
 # =========================================
