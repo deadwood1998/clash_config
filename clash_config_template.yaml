@@ -27,43 +27,29 @@ dns:
   enable: true
   listen: 0.0.0.0:1053
   ipv6: true
-  prefer-h3: true
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   use-hosts: true
-  respect-rules: false
   fake-ip-filter:
     - "*.lan"
     - "*.local"
     - "*.localhost"
-    - "+.msftconnecttest.com"
-    - "+.msftncsi.com"
-    - "connectivitycheck.gstatic.com"
-    - "connectivitycheck.platform.hicloud.com"
-    - "captive.apple.com"
-    - "time.*.com"
-    - "ntp.*.com"
-    - "+.ntp.org"
-    - "+.pool.ntp.org"
-    - "localhost.ptlogin2.qq.com"
-    - "localhost.sec.qq.com"
-    - "+.srv.nintendo.net"
-    - "+.stun.*.*"
-    - "+.stun.*.*.*"
+    # QQ / 微信 CDN — 真实 DNS 保证就近调度
+    - "*.qpic.cn"
+    - "*.gtimg.cn"
+    - "*.qq.com"
+    - "*.weixin.qq.com"
+    - "*.wechat.com"
+    - "*.weixinbridge.com"
+    - "*.tenpay.com"
+    # iCloud 中国（云上贵州）— 国内 CDN，DNS 就近调度
+    - "*.icloud.com.cn"
+    - "*.apple.com.cn"
   nameserver:
     - 223.5.5.5
     - 119.29.29.29
     - "[2400:3200::1]"
     - "[2402:4e00::]"
-  fallback:
-    - https://1.1.1.1/dns-query
-    - https://dns.google/dns-query
-    - https://[2606:4700:4700::1111]/dns-query
-  fallback-filter:
-    geoip: true
-    geoip-code: CN
-    ipcidr:
-      - 240.0.0.0/4
 
 # =========================================
 # TUN
@@ -76,6 +62,30 @@ tun:
     - any:53
   auto-route: true
   auto-detect-interface: true
+
+# =========================================
+# Sniffer (Mihomo only; Stash ignores this key)
+# =========================================
+sniffer:
+  enable: true
+  skip-domain:
+    - "*.qq.com"
+    - "*.qpic.cn"
+    - "*.gtimg.cn"
+    - "*.weixin.qq.com"
+    - "*.wechat.com"
+    - "*.weixinbridge.com"
+    - "*.tenpay.com"
+    - "*.icloud.com.cn"
+    - "*.apple.com.cn"
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
 
 # =========================================
 # Proxies – generate_config.py will inject nodes here
@@ -130,6 +140,13 @@ proxy-groups:
     proxies:
       - DIRECT
       - PROXY
+
+  - name: GITHUB
+    type: select
+    proxies:
+      - PROXY
+      - PROXY_NOHK
+      - DIRECT
 
   - name: MICROSOFT
     type: select
@@ -202,6 +219,14 @@ rule-providers:
     format: yaml
     url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/steam.yaml"
     path: ./ruleset/steam-domain.yaml
+    interval: 86400
+
+  github-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.yaml"
+    path: ./ruleset/github-domain.yaml
     interval: 86400
 
   microsoft-domain:
@@ -297,12 +322,17 @@ rules:
   # Default-direct groups (small rule sets, fast match)
   - RULE-SET,apple-domain,APPLE
   - RULE-SET,steam-cn,STEAM-CN
+  - RULE-SET,github-domain,GITHUB
   - RULE-SET,microsoft-domain,MICROSOFT
 
   # CN domains direct (bulk domestic traffic)
   - RULE-SET,direct-domain,DIRECT
   - RULE-SET,cn-ip,DIRECT,no-resolve
   - GEOIP,CN,DIRECT
+
+  - RULE-SET,telegram-domain,IM
+  - RULE-SET,telegram-ip,IM,no-resolve
+  - RULE-SET,signal-domain,IM
 
   # Block QUIC (UDP 443) for traffic that will be proxied.
   # Browsers fall back to TCP HTTPS seamlessly.
@@ -315,9 +345,7 @@ rules:
   - RULE-SET,youtube-domain,STREAM
   - RULE-SET,disney-domain,STREAM
   - RULE-SET,spotify-domain,STREAM
-  - RULE-SET,telegram-domain,IM
-  - RULE-SET,telegram-ip,IM,no-resolve
-  - RULE-SET,signal-domain,IM
+
   - RULE-SET,steam-domain,STEAM
   - RULE-SET,proxy-domain,PROXY
 
