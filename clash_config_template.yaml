@@ -334,11 +334,6 @@ rules:
   - RULE-SET,telegram-ip,IM,no-resolve
   - RULE-SET,signal-domain,IM
 
-  # Block QUIC (UDP 443) for traffic that will be proxied.
-  # Browsers fall back to TCP HTTPS seamlessly.
-  # Direct traffic already matched above, unaffected.
-  - AND,((NETWORK,udp),(DST-PORT,443)),REJECT
-
   # --- PROXY path (now TCP-only, clean tunnel) ---
   - RULE-SET,ai-domain,AI
   - RULE-SET,netflix-domain,STREAM
