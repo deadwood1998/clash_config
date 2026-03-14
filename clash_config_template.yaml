@@ -269,6 +269,14 @@ rule-providers:
     path: ./ruleset/spotify-domain.yaml
     interval: 86400
 
+  tiktok-domain:
+    type: http
+    behavior: domain
+    format: yaml
+    url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.yaml"
+    path: ./ruleset/tiktok-domain.yaml
+    interval: 86400
+
   telegram-domain:
     type: http
     behavior: domain
@@ -340,6 +348,7 @@ rules:
   - RULE-SET,youtube-domain,STREAM
   - RULE-SET,disney-domain,STREAM
   - RULE-SET,spotify-domain,STREAM
+  - RULE-SET,tiktok-domain,STREAM
 
   - RULE-SET,steam-domain,STEAM
   - RULE-SET,proxy-domain,PROXY
